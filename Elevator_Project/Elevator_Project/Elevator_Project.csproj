@@ -13,9 +13,11 @@
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <TargetFrameworkProfile />
+    <UseSharedCompilation>false</UseSharedCompilation>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
@@ -26,6 +28,7 @@
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\Release\</OutputPath>
@@ -51,6 +54,14 @@
     <Compile Include="com\Elevator_Management\Elevator.cs" />
     <Compile Include="com\Elevator_Management\Elevator_Database.cs" />
     <Compile Include="com\Elevator_Management\Floors.cs" />
+    <Compile Include="com\Elevator_Management\IElevatorState.cs" />
+    <Compile Include="com\Elevator_Management\ElevatorStateMachine.cs" />
+    <Compile Include="com\Elevator_Management\IdleState.cs" />
+    <Compile Include="com\Elevator_Management\MovingUpState.cs" />
+    <Compile Include="com\Elevator_Management\MovingDownState.cs" />
+    <Compile Include="com\Elevator_Management\DoorsOpeningState.cs" />
+    <Compile Include="com\Elevator_Management\DoorsClosingState.cs" />
+    <Compile Include="com\Elevator_Management\EmergencyState.cs" />
     <Compile Include="Main_Form.cs">
       <SubType>Form</SubType>
     </Compile>

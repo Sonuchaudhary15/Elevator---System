@@ -20,6 +20,9 @@ namespace Elevator_Project
             InitializeComponent();
             Self = this;
 
+            // Initialize State Machine (State Design Pattern)
+            stateMachine = new ElevatorStateMachine(this);
+
             // Load images from Images folder
             LoadImagesFromFolder();
 
@@ -28,9 +31,10 @@ namespace Elevator_Project
             // set the label with the current floor number
             control_label.Text = "Elevator Current Floor = " + db.GetCurrentFloor();             // Use of Abstraction
 
-            //  desable inside elevator control panel on start, enable after elevator is moved other floor
-            button_floor_1.Enabled = false;
-            button_floor_2.Enabled = false;
+            // Enable inside elevator control panel buttons if doors are closed (doors start closed by default)
+            // Buttons will be disabled during door operations and elevator movement
+            button_floor_1.Enabled = IsElevatorDoorClosed;
+            button_floor_2.Enabled = IsElevatorDoorClosed;
 
             // Make buttons circular
             MakeButtonCircular(button_floor_1);
@@ -46,6 +50,7 @@ namespace Elevator_Project
         Floors floor2 = new Floors(2, 0);
         Elevator elevator = new Elevator();
         Elevator_Database db = new Elevator_Database();
+        ElevatorStateMachine stateMachine;  // State Design Pattern - State Machine
 
         // ****************Form Buttons **********************
 
@@ -155,7 +160,27 @@ namespace Elevator_Project
                     
                     if (deletedCount >= 0)
                     {
-                        MessageBox.Show($"Successfully deleted {deletedCount} log entries.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        // After deleting all logs, initialize the elevator to floor 1 to prevent button issues
+                        // This ensures the system can continue operating after log deletion
+                        int currentFloor = GetCurrentFloorSafe();
+                        if (currentFloor == -1)
+                        {
+                            // No floor records exist, set default to floor 1
+                            db.SetCurrentFloor(1);
+                            control_label.Text = "Elevator Current Floor = 1";
+                            
+                            // Ensure elevator visual position matches floor 1
+                            elevator_box_picturebox.Location = new System.Drawing.Point(0, floor1.GetFloorYLocation());
+                            
+                            // Ensure buttons are enabled if doors are closed
+                            if (IsElevatorDoorClosed && !IsEmergencyActive)
+                            {
+                                button_floor_1.Enabled = true;
+                                button_floor_2.Enabled = true;
+                            }
+                        }
+                        
+                        MessageBox.Show($"Successfully deleted {deletedCount} log entries.\nElevator initialized to Floor 1.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
                         // Refresh the grid view
                         db.GetTablesData();
                     }
@@ -167,76 +192,69 @@ namespace Elevator_Project
             }
         }
 
-        // button 1 of the elevator control panel
+        // button 1 of the elevator control panel - Using State Design Pattern
         private void button_floor_1_Click(object sender, EventArgs e)
         {
-            if (IsEmergencyActive)
-            {
-                MessageBox.Show("Emergency mode is active. Please resolve emergency first.", "Emergency Active", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            if (Int32.Parse(db.GetCurrentFloor()) == 2)
-            {
-                move_elevatorBox_from_floor2_to_floor1.Start();
-            }
-            else
-            {
-                control_label.Text = "Lift is already on Floor 1";
-            }
+            stateMachine.PressFloorButton(1);
         }
-        // button 2 of the elevator control panel
+        
+        // button 2 of the elevator control panel - Using State Design Pattern
         private void button_floor_2_Click(object sender, EventArgs e)
         {
-            if (IsEmergencyActive)
-            {
-                MessageBox.Show("Emergency mode is active. Please resolve emergency first.", "Emergency Active", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            if (Int32.Parse(db.GetCurrentFloor()) == 1)
-            {
-                move_elevatorBox_from_floor1_to_floor2.Start();
-            }
-            else
-            {
-                control_label.Text = "Lift is already on Floor 2";
-            }
+            stateMachine.PressFloorButton(2);
         }
 
-        // ************Variables*****************      // Static Design Patterns
-        bool IsElevatorDoorClosed = true;
-        bool IsEmergencyActive = false;
+        // ************Variables*****************      // State Design Pattern
+        // Made internal for State classes to access
+        internal bool IsElevatorDoorClosed = true;
+        internal bool IsEmergencyActive = false;
 
 
         // ************Timers*****************
 
-        // Timer for Open and Close Gate of the Floor 1               implementation for door opening and closing
+        // Timer for Open and Close Gate of the Floor 1 - Using State Design Pattern
         private void floor1_door_open_close_timer_Tick(object sender, EventArgs e)
         {
             Buttons_On_Off("off");
-            if (picturebox_left_floor1_door.Width >= 0 && IsElevatorDoorClosed == true && Int32.Parse(db.GetCurrentFloor()) == 1)
+            // Disable inside controller buttons during door operations
+            button_floor_1.Enabled = false;
+            button_floor_2.Enabled = false;
+            int currentFloor = GetCurrentFloorSafe();
+            if (picturebox_left_floor1_door.Width >= 0 && IsElevatorDoorClosed == true && currentFloor == 1)
             {
+                // Transition to DoorsOpeningState if not already
+                if (stateMachine.GetCurrentState() != stateMachine.DoorsOpeningState)
+                {
+                    stateMachine.ChangeState(stateMachine.DoorsOpeningState);
+                }
                 // Open Door
-                picturebox_left_floor1_door.Width -= +5;
-                picturebox_right_floor1_door.Width -= +5;
-                picturebox_right_floor1_door.Left -= -5;
+                picturebox_left_floor1_door.Width -= 5;
+                picturebox_right_floor1_door.Width -= 5;
+                picturebox_right_floor1_door.Left += 5;
                 if (picturebox_left_floor1_door.Width <= 0) {
                     IsElevatorDoorClosed = false;
+                    // Doors are now fully open - can stay in DoorsOpeningState or transition to Idle
                 }
             }
             else if (picturebox_left_floor1_door.Width <= 141 && IsElevatorDoorClosed == false)
             {
+                // Transition to DoorsClosingState if not already
+                if (stateMachine.GetCurrentState() != stateMachine.DoorsClosingState)
+                {
+                    stateMachine.ChangeState(stateMachine.DoorsClosingState);
+                }
                 // Close door
-                picturebox_left_floor1_door.Width += +5;
-                picturebox_right_floor1_door.Width += +5;
-                picturebox_right_floor1_door.Left += -5;
+                picturebox_left_floor1_door.Width += 5;
+                picturebox_right_floor1_door.Width += 5;
+                picturebox_right_floor1_door.Left -= 5;
                 if (picturebox_left_floor1_door.Width >= 142)
                 {
                     // Stop This timer
                     IsElevatorDoorClosed = true;
                     floor1_door_open_close_timer.Stop();
                     Buttons_On_Off("on");
+                    // Transition to Idle state when doors are closed
+                    stateMachine.ChangeState(stateMachine.IdleState);
                     //  enable elevator inside control panel buttons
                     button_floor_1.Enabled = true;
                     button_floor_2.Enabled = true;
@@ -244,33 +262,50 @@ namespace Elevator_Project
             }
         }
 
-        // Timer for Open and Close Gate of the Floor 2
+        // Timer for Open and Close Gate of the Floor 2 - Using State Design Pattern
         private void floor2_door_open_close_timer_Tick(object sender, EventArgs e)
         {
             Buttons_On_Off("off");
-            if (picturebox_left_floor2_door.Width >= 0 && IsElevatorDoorClosed == true && Int32.Parse(db.GetCurrentFloor()) == 2)
+            // Disable inside controller buttons during door operations
+            button_floor_1.Enabled = false;
+            button_floor_2.Enabled = false;
+            int currentFloor = GetCurrentFloorSafe();
+            if (picturebox_left_floor2_door.Width >= 0 && IsElevatorDoorClosed == true && currentFloor == 2)
             {
+                // Transition to DoorsOpeningState if not already
+                if (stateMachine.GetCurrentState() != stateMachine.DoorsOpeningState)
+                {
+                    stateMachine.ChangeState(stateMachine.DoorsOpeningState);
+                }
                 // Open Door
-                picturebox_left_floor2_door.Width -= +5;
-                picturebox_right_floor2_door.Width -= +5;
-                picturebox_right_floor2_door.Left -= -5;
+                picturebox_left_floor2_door.Width -= 5;
+                picturebox_right_floor2_door.Width -= 5;
+                picturebox_right_floor2_door.Left += 5;
                 if (picturebox_left_floor2_door.Width <= 0)
                 {
                     IsElevatorDoorClosed = false;
+                    // Doors are now fully open
                 }
             }
             else if (picturebox_left_floor2_door.Width <= 141 && IsElevatorDoorClosed == false)
             {
+                // Transition to DoorsClosingState if not already
+                if (stateMachine.GetCurrentState() != stateMachine.DoorsClosingState)
+                {
+                    stateMachine.ChangeState(stateMachine.DoorsClosingState);
+                }
                 // Close door
-                picturebox_left_floor2_door.Width += +5;
-                picturebox_right_floor2_door.Width += +5;
-                picturebox_right_floor2_door.Left += -5;
+                picturebox_left_floor2_door.Width += 5;
+                picturebox_right_floor2_door.Width += 5;
+                picturebox_right_floor2_door.Left -= 5;
                 if (picturebox_left_floor2_door.Width >= 142)
                 {
                     // Stop This timer
                     IsElevatorDoorClosed = true;
                     floor2_door_open_close_timer.Stop();
                     Buttons_On_Off("on");
+                    // Transition to Idle state when doors are closed
+                    stateMachine.ChangeState(stateMachine.IdleState);
                     //  enable elevator inside control panel buttons
                     button_floor_1.Enabled = true;
                     button_floor_2.Enabled = true;
@@ -278,16 +313,21 @@ namespace Elevator_Project
             }
         }
 
-        // Timer for moving the elevator from floor 2 to floor 1
+        // Timer for moving the elevator from floor 2 to floor 1 - Using State Design Pattern
         private void move_elevatorBox_from_floor2_to_floor1_Tick(object sender, EventArgs e)
         {
             Buttons_On_Off("off");
+            // Disable inside controller buttons during movement
+            button_floor_1.Enabled = false;
+            button_floor_2.Enabled = false;
             control_label.Text = "Going to Floor 1";
             if (floor2_door_open_close_timer.Enabled == false)
             {
                 elevator_box_picturebox.Top += 5;
                 if (elevator_box_picturebox.Location.Y >= floor1.GetFloorYLocation()) {
                     move_elevatorBox_from_floor2_to_floor1.Stop();
+                    // Transition to DoorsOpeningState when arriving at destination
+                    stateMachine.ChangeState(stateMachine.DoorsOpeningState);
                     floor1.Open_Close_Gates();
                     db.SetCurrentFloor(1);
                     db.GetTablesData();
@@ -298,16 +338,21 @@ namespace Elevator_Project
             }
         }
 
-        // Timer for moving the elevator from floor 1 to floor 2
+        // Timer for moving the elevator from floor 1 to floor 2 - Using State Design Pattern
         private void move_elevatorBox_from_floor1_to_floor2_Tick(object sender, EventArgs e)
         {
             Buttons_On_Off("off");
+            // Disable inside controller buttons during movement
+            button_floor_1.Enabled = false;
+            button_floor_2.Enabled = false;
             control_label.Text = "Going to Floor 2";
             if (floor1_door_open_close_timer.Enabled == false)
             {
                 elevator_box_picturebox.Top -= 5;
                 if (elevator_box_picturebox.Location.Y <= floor2.GetFloorYLocation()){
                     move_elevatorBox_from_floor1_to_floor2.Stop();
+                    // Transition to DoorsOpeningState when arriving at destination
+                    stateMachine.ChangeState(stateMachine.DoorsOpeningState);
                     floor2.Open_Close_Gates();
                     db.SetCurrentFloor(2);
                     db.GetTablesData();
@@ -319,6 +364,37 @@ namespace Elevator_Project
         }
 
         // **************Functions***************
+
+        // Helper function to safely get current floor as integer
+        // Returns -1 if parsing fails (e.g., no database records)
+        // Made internal for State classes to access
+        internal int GetCurrentFloorSafe()
+        {
+            string floorStr = db.GetCurrentFloor();
+            int floor;
+            if (Int32.TryParse(floorStr, out floor))
+            {
+                return floor;
+            }
+            // If parsing fails, return -1 (invalid floor)
+            return -1;
+        }
+
+        // Helper function to initialize elevator to a specific floor
+        // Made internal for State classes to access
+        internal void InitializeElevatorToFloor(int floorNumber)
+        {
+            db.SetCurrentFloor(floorNumber);
+            if (floorNumber == 1)
+            {
+                elevator_box_picturebox.Location = new System.Drawing.Point(0, floor1.GetFloorYLocation());
+            }
+            else if (floorNumber == 2)
+            {
+                elevator_box_picturebox.Location = new System.Drawing.Point(0, floor2.GetFloorYLocation());
+            }
+            control_label.Text = $"Elevator Current Floor = {floorNumber}";
+        }
 
         // Function to load images from Images folder
         private void LoadImagesFromFolder()
@@ -364,19 +440,18 @@ namespace Elevator_Project
 
         // fuction to set the elevatorBox on program run.
         private void SetElevator() {
-            try
+            int currentFloor = GetCurrentFloorSafe();
+            if (currentFloor == 1)
             {
-                if (Int32.Parse(db.GetCurrentFloor()) == 1)
-                {
-                    elevator_box_picturebox.Location = new System.Drawing.Point(0, floor1.GetFloorYLocation());
-                }
-                else if (Int32.Parse(db.GetCurrentFloor()) == 2)
-                {
-                    elevator_box_picturebox.Location = new System.Drawing.Point(0, floor2.GetFloorYLocation());
-                }
+                elevator_box_picturebox.Location = new System.Drawing.Point(0, floor1.GetFloorYLocation());
             }
-            catch {
-                // by default add the elevator to floor 0
+            else if (currentFloor == 2)
+            {
+                elevator_box_picturebox.Location = new System.Drawing.Point(0, floor2.GetFloorYLocation());
+            }
+            else
+            {
+                // by default add the elevator to floor 1 if no valid floor found
                 elevator_box_picturebox.Location = new System.Drawing.Point(0, floor1.GetFloorYLocation());
                 // and add to the db for other functions to work correctly
                 db.SetCurrentFloor(1);
@@ -404,97 +479,28 @@ namespace Elevator_Project
             }
         }
 
-        // Open door button handler
+        // Open door button handler - Using State Design Pattern
         private void button_open_door_Click(object sender, EventArgs e)
         {
-            if (IsEmergencyActive)
-            {
-                MessageBox.Show("Emergency mode is active. Please resolve emergency first.", "Emergency Active", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            int currentFloor = Int32.Parse(db.GetCurrentFloor());
-            if (currentFloor == 1)
-            {
-                // Open floor 1 doors
-                if (IsElevatorDoorClosed)
-                {
-                    floor1_door_open_close_timer.Start();
-                }
-            }
-            else if (currentFloor == 2)
-            {
-                // Open floor 2 doors
-                if (IsElevatorDoorClosed)
-                {
-                    floor2_door_open_close_timer.Start();
-                }
-            }
+            stateMachine.OpenDoors();
         }
 
-        // Close door button handler
+        // Close door button handler - Using State Design Pattern
         private void button_close_door_Click(object sender, EventArgs e)
         {
-            if (IsEmergencyActive)
-            {
-                MessageBox.Show("Emergency mode is active. Please resolve emergency first.", "Emergency Active", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            int currentFloor = Int32.Parse(db.GetCurrentFloor());
-            if (currentFloor == 1)
-            {
-                // Close floor 1 doors
-                if (!IsElevatorDoorClosed)
-                {
-                    floor1_door_open_close_timer.Start();
-                }
-            }
-            else if (currentFloor == 2)
-            {
-                // Close floor 2 doors
-                if (!IsElevatorDoorClosed)
-                {
-                    floor2_door_open_close_timer.Start();
-                }
-            }
+            stateMachine.CloseDoors();
         }
 
-        // Emergency button handler
+        // Emergency button handler - Using State Design Pattern
         private void button_emergency_Click(object sender, EventArgs e)
         {
             if (!IsEmergencyActive)
             {
-                // Activate emergency mode
-                IsEmergencyActive = true;
-                button_emergency.BackColor = Color.DarkRed;
-                button_emergency.Text = ""; // Clear text to show only icon
-                button_emergency.Invalidate(); // Refresh to redraw icon
-
-                // Stop all elevator movements
-                move_elevatorBox_from_floor1_to_floor2.Stop();
-                move_elevatorBox_from_floor2_to_floor1.Stop();
-
-                // Show emergency message
-                MessageBox.Show("EMERGENCY MODE ACTIVATED!\n\nElevator operations have been halted.\nPlease contact building management for assistance.", 
-                    "EMERGENCY", MessageBoxButtons.OK, MessageBoxIcon.Stop);
+                stateMachine.ActivateEmergency();
             }
             else
             {
-                // Deactivate emergency mode
-                DialogResult result = MessageBox.Show("Do you want to deactivate emergency mode?", 
-                    "Deactivate Emergency", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-
-                if (result == DialogResult.Yes)
-                {
-                    IsEmergencyActive = false;
-                    button_emergency.BackColor = Color.Red;
-                    button_emergency.Text = ""; // Keep text empty for icon display
-                    button_emergency.Invalidate(); // Refresh to redraw icon
-
-                    MessageBox.Show("Emergency mode deactivated.\nNormal operations resumed.", 
-                        "Emergency Deactivated", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
+                stateMachine.DeactivateEmergency();
             }
         }
 
